@@ -2,10 +2,12 @@ import aiohttp
 from bs4 import BeautifulSoup
 import json
 import asyncio
+from semantic_filtering import validate_results
 
 
-def parse_filters(filters: dict) -> dict:
+def parse_filters(filters: dict) -> tuple[dict, str]:
     ready_filters = {}
+    request_keywords = ''
     for filter_k, filter_v in filters.items():
         match filter_k:
             case 'easy_apply':
@@ -77,10 +79,12 @@ def parse_filters(filters: dict) -> dict:
             case 'keyword_job_title':
                 if filter_v.value != '':
                     ready_filters['keyword_job_title'] = f"q={filter_v.value.replace(' ', '+')}"
+                    request_keywords = filter_v.value
             case 'keyword_location':
                 if filter_v.value != '':
                     ready_filters['keyword_location'] = f"location={filter_v.value.replace(' ', '+')}"
-    return ready_filters
+
+    return ready_filters, request_keywords
 
 
 def create_link(filters: dict) -> str:
@@ -169,23 +173,33 @@ async def fetch_json(url: str) -> list[list]:
 
 
 async def start_search(filters: dict = 1):
-    ready_filters = parse_filters(filters=filters)
+    ready_filters, request_query = parse_filters(filters=filters)
     url = create_link(filters=ready_filters)
     print(url)
     # test_link = 'https://www.dice.com/jobs?filters.easyApply=true&filters.postedDate=SEVEN&filters.employmentType=FULLTIME&filters.employerType=Direct+Hire&filters.workplaceTypes=Remote&q=python'
     # test_link_2 = 'https://www.dice.com/jobs?filters.easyApply=true&filters.postedDate=ONE&filters.employmentType=FULLTIME&filters.employerType=Direct+Hire&filters.workplaceTypes=Remote&q=python'
     # test_link_3 = 'https://www.dice.com/jobs?q=python'
+    # test_link_project_manager = 'https://www.dice.com/jobs?filters.employmentType=FULLTIME&filters.postedDate=THREE&filters.workplaceTypes=Remote&q=IT+Project+Manager'
+    # test_link_4 = 'https://www.dice.com/jobs?q=CHIEF+MARKETING+OFFICER'
     fetch_result = await fetch_json(url=url)
     parsed_jsons = {}
     items_count = 0
     for item in fetch_result:
+        data_dict = dict()
         k, raw_data = item
         result = parse_request_result(data=raw_data)
-        parsed_jsons[k] = result
+        parsed_jsons[k] = {}
+        for ind, element in enumerate(result['data']):
+            ind += 1
+            data_dict[ind] = element
+        parsed_jsons[k]['data'] = data_dict
         items_count += len(result['data'])
-    results = json.dumps(parsed_jsons, indent=2)
+
+    # request_query = 'IT Project Manager'
+    relevant_count, validated_results = await validate_results(parsed_results=parsed_jsons, request_query=request_query)
+    results = json.dumps(validated_results, indent=2)
     # print(results)
-    return items_count, url, results
+    return items_count, relevant_count, url, results
 
 
 

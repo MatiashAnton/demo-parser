@@ -140,15 +140,18 @@ async def main(page: ft.Page):
         bgcolor='yellow'
     )
     count_vacancies = ft.TextField(hint_text='Count of vacancies', read_only=True)
+    relevant_vacancies = ft.TextField(hint_text='Relevant vacancies', read_only=True)
     search_url = ft.TextField(hint_text='Requested link', read_only=True)
+
     output = ft.TextField(value="RESULT WILL BE HERE", multiline=True, read_only=True)
     # selectable = True
 
     def on_click_search():
         parsed_json = asyncio.run(start_search(filters=filters_dict))
         count_vacancies.value = f"Count of vacancies: {parsed_json[0]}"
-        search_url.value = parsed_json[1]
-        output.value = parsed_json[2]
+        relevant_vacancies.value = f"Relevant Vacancies: {parsed_json[1]}"
+        search_url.value = parsed_json[2]
+        output.value = parsed_json[3]
         print(output.value)
 
         page.update()
@@ -176,6 +179,7 @@ async def main(page: ft.Page):
     link_plus_count = ft.Row(
         [
             count_vacancies,
+            relevant_vacancies,
             search_url
         ]
     )
