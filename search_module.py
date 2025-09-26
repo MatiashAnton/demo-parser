@@ -194,7 +194,10 @@ async def start_search(filters: dict = 1):
             data_dict[ind] = element
         parsed_jsons[k]['data'] = data_dict
         items_count += len(result['data'])
-
+    if items_count == 0:
+        relevant_count = 0
+        results = json.dumps(parsed_jsons, indent=2)
+        return items_count, relevant_count, url, results
     # request_query = 'IT Project Manager'
     relevant_count, validated_results = await validate_results(parsed_results=parsed_jsons, request_query=request_query)
     results = json.dumps(validated_results, indent=2)
@@ -204,4 +207,5 @@ async def start_search(filters: dict = 1):
 
 
 if __name__ == '__main__':
+
     asyncio.run(start_search())
