@@ -1,7 +1,9 @@
+import asyncio
+import json
+
 import aiohttp
 from bs4 import BeautifulSoup
-import json
-import asyncio
+
 from semantic_filtering import validate_results
 
 
@@ -171,16 +173,46 @@ async def fetch_json(url: str) -> list[list]:
     return all_results
 
 
+async def fetch_description(url, numeration, page):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url=url) as response:
+            data = await response.text()
+    soup = BeautifulSoup(data, 'lxml')
+    description = soup.find('div', {'data-testid': "jobDescriptionHtml"})
+    return page, numeration, description
+
+
+async def create_description_tasks(data):
+    tasks = []
+    for page in data:
+        if len(data[page]['data']) < 0:
+            continue
+        for i, value in data[page]['data'].items():
+            link = data[page]['data'][i]['detailsPageUrl']
+            if 'redirect' in link:
+                continue
+            task = fetch_description(url=link, numeration=i, page=page)
+            tasks.append(task)
+    return tasks
+
+
+async def fetch_descriptions(validated):
+    tasks = await create_description_tasks(data=validated)
+    results = await asyncio.gather(*tasks)
+    count = 0
+    for page, number, value in results:
+        if value is None:
+            count += 1
+        value = value.text
+        validated[page]['data'][number]['fullDescription'] = value
+    return validated, count
+
+
 
 async def start_search(filters: dict = 1):
     ready_filters, request_query = parse_filters(filters=filters)
     url = create_link(filters=ready_filters)
     print(url)
-    # test_link = 'https://www.dice.com/jobs?filters.easyApply=true&filters.postedDate=SEVEN&filters.employmentType=FULLTIME&filters.employerType=Direct+Hire&filters.workplaceTypes=Remote&q=python'
-    # test_link_2 = 'https://www.dice.com/jobs?filters.easyApply=true&filters.postedDate=ONE&filters.employmentType=FULLTIME&filters.employerType=Direct+Hire&filters.workplaceTypes=Remote&q=python'
-    # test_link_3 = 'https://www.dice.com/jobs?q=python'
-    # test_link_project_manager = 'https://www.dice.com/jobs?filters.employmentType=FULLTIME&filters.postedDate=THREE&filters.workplaceTypes=Remote&q=IT+Project+Manager'
-    # test_link_4 = 'https://www.dice.com/jobs?q=CHIEF+MARKETING+OFFICER'
     fetch_result = await fetch_json(url=url)
     parsed_jsons = {}
     items_count = 0
@@ -198,14 +230,17 @@ async def start_search(filters: dict = 1):
         relevant_count = 0
         results = json.dumps(parsed_jsons, indent=2)
         return items_count, relevant_count, url, results
-    # request_query = 'IT Project Manager'
     relevant_count, validated_results = await validate_results(parsed_results=parsed_jsons, request_query=request_query)
-    results = json.dumps(validated_results, indent=2)
+    if relevant_count == 0:
+        results = json.dumps(validated_results, indent=2)
+        return items_count, relevant_count, url, results
+    results_with_desc, without_desc = await fetch_descriptions(validated=validated_results)
+    results = json.dumps(results_with_desc, indent=2)
+    print(f"!!! {without_desc} - without description !!!")
     # print(results)
     return items_count, relevant_count, url, results
 
 
-
 if __name__ == '__main__':
-
     asyncio.run(start_search())
+
